@@ -2,11 +2,14 @@
 //
 
 #include "pch.h"
+#include "Server.h"
 #include <iostream>
 
 int main()
 {
-    std::cout << "Hello World!\n"; 
+	Server srv = Server((char*)"8080");
+	srv.ServerListen();
+    std::cout << "Exiting!\n"; 
 }
 
 // Run program: Ctrl + F5 or Debug > Start Without Debugging menu
