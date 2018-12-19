@@ -153,6 +153,7 @@
   <ItemGroup>
     <ClInclude Include="pch.h" />
     <ClInclude Include="Server.h" />
+    <ClInclude Include="Threading.h" />
     <ClInclude Include="Utils.h" />
   </ItemGroup>
   <ItemGroup>
@@ -163,6 +164,7 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="Server.cpp" />
+    <ClCompile Include="Threading.cpp" />
     <ClCompile Include="Utils.cpp" />
     <ClCompile Include="WebServer.cpp" />
   </ItemGroup>
