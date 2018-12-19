@@ -13,8 +13,29 @@ Server::~Server()
 {
 }
 
-int Server::ErrorHandler(int iRes, SOCKET * sock, addrinfo * addr)
+int Server::ErrorHandler(int iRes, char* error, SOCKET * sock, addrinfo * addr)
 {
+	switch (iRes)
+	{
+	case !0:
+		printf_s("%s failed with error: %d\n", error, iRes);
+		if (error != (char*)"WSAStartup") WSACleanup();
+		return 1;
+	case 0:
+		if (sock != NULL) {
+			printf_s("%d failed with error: %ld\n", error, WSAGetLastError());
+			if (addr) {
+				freeaddrinfo(addr);
+			}
+			else {
+				closesocket(*sock);
+			}
+			return 1;
+		}
+		return 0;
+	default:
+		return 0;
+	}
 	return 0;
 }
 
@@ -27,11 +48,7 @@ int Server::ServerListen()
 	char recvbuf[DEFAULT_BUFLEN];
 
 	// Initialize Winsock
-	iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
-	if (iResult != 0) {
-		printf("WSAStartup failed with error: %d\n", iResult);
-		return 1;
-	}
+	iResult = Server::ErrorHandler(WSAStartup(MAKEWORD(2, 2), &wsaData), (char*)"WSAStartup");
 
 	ZeroMemory(&hints, sizeof(hints));
 	hints.ai_family = AF_INET;
@@ -40,24 +57,15 @@ int Server::ServerListen()
 	hints.ai_flags = AI_PASSIVE;
 
 	// Resolve the server address and port
-	iResult = getaddrinfo(NULL, Server::serverPort, &hints, &result);
-	if (iResult != 0) {
-		printf("getaddrinfo failed with error: %d\n", iResult);
-		WSACleanup();
-		return 1;
-	}
+	iResult = Server::ErrorHandler(getaddrinfo(NULL, Server::serverPort, &hints, &result), (char*)"getaddrinfo");
 
 	// Create a SOCKET for connecting to server
 	ListenSocket = socket(result->ai_family, result->ai_socktype, result->ai_protocol);
-	if (ListenSocket == INVALID_SOCKET) {
-		printf("socket failed with error: %ld\n", WSAGetLastError());
-		freeaddrinfo(result);
-		WSACleanup();
-		return 1;
-	}
+	Server::ErrorHandler(0, (char*)"socket", &ListenSocket, result);
 
 	// Setup the TCP listening socket
 	iResult = bind(ListenSocket, result->ai_addr, (int)result->ai_addrlen);
+	iResult = Server::ErrorHandler(bind(ListenSocket, result->ai_addr, (int)result->ai_addrlen), (char*)"bind", &ListenSocket);
 	if (iResult == SOCKET_ERROR) {
 		printf("bind failed with error: %d\n", WSAGetLastError());
 		freeaddrinfo(result);
@@ -112,7 +120,7 @@ int Server::ServerListen()
 		std::string finalWord(hey);
 		std::string f2(file);
 		finalWord += f2;
-		iSendResult = send(ClientSocket, finalWord.c_str(), finalWord.length(), 0);
+		iSendResult = send(ClientSocket, finalWord.c_str(), (int)finalWord.length(), 0);
 		shutdown(ClientSocket, SD_SEND);
 		closesocket(ClientSocket);
 		WSACleanup();

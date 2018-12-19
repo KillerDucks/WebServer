@@ -48,7 +48,7 @@ public:
 	~Server();
 
 	// Error Handling
-	int			ErrorHandler(int iRes, SOCKET *sock = NULL, addrinfo *addr = NULL);														// Handle any errors from the WinSock server
+	int			ErrorHandler(int iRes, char* error, SOCKET *sock = NULL, addrinfo *addr = NULL);														// Handle any errors from the WinSock server
 
 	// Data parsing
 	void		RemovePadding(char* inBuffer, int dataLength, char* outBuffer);		// Remove the random data from the incomming buffer
