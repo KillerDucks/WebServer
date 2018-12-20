@@ -1,1 +1,8 @@
-Impliment multithreading
+High Priority:
+	Listen for another socket after serving data
+
+Medium Priority:
+	Look for other HTTP errors (Not just 404)
+
+Low Priority:
+	Impliment multithreading
