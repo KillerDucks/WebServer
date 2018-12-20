@@ -48,7 +48,11 @@ int Server::ServerListen()
 	char recvbuf[DEFAULT_BUFLEN];
 
 	// Initialize Winsock
-	iResult = Server::ErrorHandler(WSAStartup(MAKEWORD(2, 2), &wsaData), (char*)"WSAStartup");
+	iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
+	if (iResult != 0) {
+		printf("WSAStartup failed with error: %d\n", iResult);
+		return 1;
+	}
 
 	ZeroMemory(&hints, sizeof(hints));
 	hints.ai_family = AF_INET;
@@ -57,15 +61,24 @@ int Server::ServerListen()
 	hints.ai_flags = AI_PASSIVE;
 
 	// Resolve the server address and port
-	iResult = Server::ErrorHandler(getaddrinfo(NULL, Server::serverPort, &hints, &result), (char*)"getaddrinfo");
+	iResult = getaddrinfo(NULL, Server::serverPort, &hints, &result);
+	if (iResult != 0) {
+		printf("getaddrinfo failed with error: %d\n", iResult);
+		WSACleanup();
+		return 1;
+	}
 
 	// Create a SOCKET for connecting to server
 	ListenSocket = socket(result->ai_family, result->ai_socktype, result->ai_protocol);
-	Server::ErrorHandler(0, (char*)"socket", &ListenSocket, result);
+	if (ListenSocket == INVALID_SOCKET) {
+		printf("socket failed with error: %ld\n", WSAGetLastError());
+		freeaddrinfo(result);
+		WSACleanup();
+		return 1;
+	}
 
 	// Setup the TCP listening socket
 	iResult = bind(ListenSocket, result->ai_addr, (int)result->ai_addrlen);
-	iResult = Server::ErrorHandler(bind(ListenSocket, result->ai_addr, (int)result->ai_addrlen), (char*)"bind", &ListenSocket);
 	if (iResult == SOCKET_ERROR) {
 		printf("bind failed with error: %d\n", WSAGetLastError());
 		freeaddrinfo(result);
@@ -96,6 +109,7 @@ int Server::ServerListen()
 	// No longer need server socket
 	closesocket(ListenSocket);
 
+	// Serve File
 	iResult = recv(ClientSocket, recvbuf, recvbuflen, 0);
 	if (iResult > 0) {
 		printf("Bytes received: %d\n", iResult);
