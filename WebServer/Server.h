@@ -48,21 +48,22 @@ public:
 	~Server();
 
 	// Error Handling
-	int			ErrorHandler(int iRes, char* error, SOCKET *sock = NULL, addrinfo *addr = NULL);														// Handle any errors from the WinSock server
+	int			ErrorHandler(int iRes, char* error, SOCKET *sock = NULL, addrinfo *addr = NULL);	// Handle any errors from the WinSock server
 
 	// Data parsing
-	void		RemovePadding(char* inBuffer, int dataLength, char* outBuffer);		// Remove the random data from the incomming buffer
-	HTTPObject	GetHTTPMeta(char* inBuffer); 										// A way to strip the HTTP header from the incoming data
+	void		RemovePadding(char* inBuffer, int dataLength, char* outBuffer);						// Remove the random data from the incomming buffer
+	HTTPObject	GetHTTPMeta(char* inBuffer); 														// A way to strip the HTTP header from the incoming data
 	char*		CreateBuffer(HTTPObject httpObject);
 
 	// Data Transmission
-	int			SendBuffer(char* outBuffer, int dataLength);						// Send a completed buffer back to the client
+	static int			RequestParse(SOCKET clientSock);													// Handle incoming data from the client request
+	static int			SendBuffer(SOCKET clientSock, char* outBuffer, int dataLength);						// Send a completed buffer back to the client
 
 	// Server
 	int			ServerListen();
 
 	// File I/O
-	static char*		fileConsume(char* fileName);
-	static char*		searchDirectory(char* fileName);
+	static char*		FileConsume(char* fileName);
+	static bool			SearchDirectory(char* fileName);
 };
 

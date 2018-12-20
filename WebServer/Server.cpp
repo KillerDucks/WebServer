@@ -42,10 +42,9 @@ int Server::ErrorHandler(int iRes, char* error, SOCKET * sock, addrinfo * addr)
 int Server::ServerListen()
 {
 	WSADATA wsaData;
-	int iResult, iSendResult, recvbuflen = DEFAULT_BUFLEN;
+	int iResult, recvbuflen = DEFAULT_BUFLEN;
 	SOCKET ListenSocket = INVALID_SOCKET, ClientSocket = INVALID_SOCKET;
 	struct addrinfo *result = NULL, hints;
-	char recvbuf[DEFAULT_BUFLEN];
 
 	// Initialize Winsock
 	iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
@@ -89,78 +88,110 @@ int Server::ServerListen()
 
 	freeaddrinfo(result);
 
-	iResult = listen(ListenSocket, SOMAXCONN);
-	if (iResult == SOCKET_ERROR) {
-		printf("listen failed with error: %d\n", WSAGetLastError());
-		closesocket(ListenSocket);
-		WSACleanup();
-		return 1;
-	}
-
-	// Accept a client socket
-	ClientSocket = accept(ListenSocket, NULL, NULL);
-	if (ClientSocket == INVALID_SOCKET) {
-		printf("accept failed with error: %d\n", WSAGetLastError());
-		closesocket(ListenSocket);
-		WSACleanup();
-		return 1;
-	}
-
-	// No longer need server socket
-	closesocket(ListenSocket);
-
-	// Serve File
-	iResult = recv(ClientSocket, recvbuf, recvbuflen, 0);
-	if (iResult > 0) {
-		printf("Bytes received: %d\n", iResult);
-		std::vector<std::string> splits;
-		Utils::SearchString(recvbuf, &splits, ' ');
-		printf_s("Requested File: %s\n", splits[1].substr(1, splits[1].length()).c_str());
-		char* fileFound;
-		fileFound = Server::searchDirectory((char*)splits[1].substr(1, splits[1].length()).c_str());
-		char* file;
-		char*  hey;
-		if (fileFound != "")
-		{
-			file = Server::fileConsume((char*)splits[1].substr(1, splits[1].length()).c_str());
-			hey = (char*)"HTTP / 1.1 200 OK\nServer: DeltaX / 1.0.0\nContent - Type: text / html\n\n";
-		}
-		else 
-		{
-			file = Server::fileConsume((char*)"404.html");
-			hey = (char*)"HTTP / 1.1 404 OK\nServer: DeltaX / 1.0.0\nContent - Type: text / html\n\n";
-		}
-		// Send over the correct file
-		std::string finalWord(hey);
-		std::string f2(file);
-		finalWord += f2;
-		iSendResult = send(ClientSocket, finalWord.c_str(), (int)finalWord.length(), 0);
-		shutdown(ClientSocket, SD_SEND);
-		closesocket(ClientSocket);
-		WSACleanup();
-		return 0;
-			 
-		if (iSendResult == SOCKET_ERROR) {
-			printf("send failed with error: %d\n", WSAGetLastError());
-			closesocket(ClientSocket);
+	do
+	{
+		iResult = listen(ListenSocket, SOMAXCONN);
+		if (iResult == SOCKET_ERROR) {
+			printf("listen failed with error: %d\n", WSAGetLastError());
+			closesocket(ListenSocket);
 			WSACleanup();
 			return 1;
 		}
-		printf("Bytes sent: %d\n", iSendResult);
-	}
-	else if (iResult == 0)
-		printf("Connection closing...\n");
-	else {
-		printf("recv failed with error: %d\n", WSAGetLastError());
-		closesocket(ClientSocket);
-		WSACleanup();
-		return 1;
-	}
+
+		// Accept a client socket
+		ClientSocket = accept(ListenSocket, NULL, NULL);
+		if (ClientSocket == INVALID_SOCKET) {
+			printf("accept failed with error: %d\n", WSAGetLastError());
+			closesocket(ListenSocket);
+			WSACleanup();
+			return 1;
+		}
+
+		// No longer need server socket
+			//closesocket(ListenSocket);
+
+		// Parse Request -> Serve Data
+		if (Server::RequestParse(ClientSocket))
+		{
+			printf("[Server::ServerListen]\tFailed to Parse Client Request\n");
+		}
+
+	} while (true);
+	
+	WSACleanup();
 
 	return 0;
 }
 
-char* Server::fileConsume(char* fileName)
+int Server::RequestParse(SOCKET clientSock)
+{
+	int		iResult, inBuffLen = DEFAULT_BUFLEN;
+	char	inBuff[DEFAULT_BUFLEN];
+	
+	iResult = recv(clientSock, inBuff, inBuffLen, 0);
+
+	if (iResult > 0) {
+		char*						file;
+		char*						header;
+		std::vector<std::string>	splits;
+
+		printf("[Server::RequestParse]\tBytes received: %d\n", iResult);
+		
+		Utils::SearchString(inBuff, &splits, ' ');
+		printf_s("[Server::RequestParse]\tRequested File: %s\n", splits[1].substr(1, splits[1].length()).c_str());
+		
+		if (Server::SearchDirectory((char*)splits[1].substr(1, splits[1].length()).c_str()))
+		{
+			file = Server::FileConsume((char*)splits[1].substr(1, splits[1].length()).c_str());
+			header = (char*)"HTTP / 1.1 200 OK\nServer: DeltaX / 1.0.0\nContent - Type: text / html\n\n";
+		}
+		else
+		{
+			file = Server::FileConsume((char*)"404.html");
+			header = (char*)"HTTP / 1.1 404 Not Found\nServer: DeltaX / 1.0.0\nContent - Type: text / html\n\n";
+		}
+
+		// Send over the correct file
+		std::string httpResponse(header), requestedData(file);
+		httpResponse += requestedData;
+
+		if (Server::SendBuffer(clientSock, (char*)httpResponse.c_str(), (int)httpResponse.length()))
+		{
+			closesocket(clientSock);
+		}
+
+		shutdown(clientSock, SD_SEND);
+		closesocket(clientSock);
+		
+		return 0;
+		
+	}
+	else {
+		printf("[Server::RequestParse]\trecv failed with error: %d\n", WSAGetLastError());
+		closesocket(clientSock);
+		WSACleanup();
+		return 1;
+	}
+}
+
+int Server::SendBuffer(SOCKET clientSock, char* outBuffer, int dataLength)
+{
+	int		iSendResult = 0;
+
+	iSendResult = send(clientSock, outBuffer, dataLength, 0);
+
+	// Check for Socket Errors
+	if (iSendResult == SOCKET_ERROR) {
+		printf("send failed with error: %d\n", WSAGetLastError());
+		return 1;
+	}
+
+	printf("[Server::SendBuffer]\tBytes sent: %d\n", iSendResult);
+
+	return 0;
+}
+
+char* Server::FileConsume(char* fileName)
 {
 	#define BUFFERSIZE 1024
     HANDLE hFile;
@@ -178,21 +209,21 @@ char* Server::fileConsume(char* fileName)
 
 	if (hFile == INVALID_HANDLE_VALUE)
 	{
-		printf(TEXT("Terminal failure: unable to open file \"%s\" for read.\n"), fileName);
+		printf("[Server::FileConsume]\tTerminal failure: unable to open file \"%s\" for read.\n", fileName);
 		return (char*)"Error";
 	}
 
 	// Get File Size
 	GetFileSizeEx(hFile, &fileSize);
 
-	printf_s("File Size: %lld\n", fileSize.QuadPart);
+	printf_s("[Server::FileConsume]\tFile Size: %lld\n", fileSize.QuadPart);
 
 	// Read one character less than the buffer size to save room for
 	// the terminating NULL character. 
 
 	if (FALSE == ReadFile(hFile, ReadBuffer, (DWORD)fileSize.QuadPart, NULL, NULL))
 	{
-		printf("Terminal failure: Unable to read from file.\n GetLastError=%08x\n", GetLastError());
+		printf("[Server::FileConsume]\tTerminal failure: Unable to read from file.\n GetLastError=%08x\n", GetLastError());
 		CloseHandle(hFile);
 		return (char*)"Error";
 	}
@@ -204,17 +235,18 @@ char* Server::fileConsume(char* fileName)
 	return ReadBuffer;
 }
 
-char* Server::searchDirectory(char* fileName)
+bool Server::SearchDirectory(char* fileName)
 {
 	static WIN32_FIND_DATAA searchData;
 
 	FindFirstFileA(fileName, &searchData);
 
-	if (searchData.cFileName != fileName) {
+	if (searchData.nFileSizeLow == 0) {
 		// File not found
-		return (char*)"";
+		printf_s("[Server::SearchDirectory]\tUnable to Find File Name: %s\n", fileName);
+		return false;
 	}
 
-	printf_s("Found File Name: %s\n", searchData.cFileName);
-	return searchData.cFileName;
+	printf_s("[Server::SearchDirectory]\tFound File Name: %s\n", searchData.cFileName);
+	return true;
 }
